@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-11-27
+# Last modified: 2024-11-28
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 
 import logging
 from os import PathLike
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, List
 
 import av
 import einops
@@ -71,7 +71,7 @@ def load_video_frames(
     processing_res: int = 0,
     resample_method: str = "BILINEAR",
     verbose: bool = False,
-) -> Tuple[torch.Tensor, Union[torch.Size, None]]:
+) -> Tuple[torch.Tensor, torch.Size]:
     assert start_frame >= 0
 
     # Open the video file
@@ -94,7 +94,7 @@ def load_video_frames(
     else:
         frame_iterable = container.decode(stream)  # type: ignore
     frame_ls = []
-    original_res = None
+    original_res: torch.Size = None  # type: ignore
     for i, frame in enumerate(frame_iterable):
         if i >= start_frame and i < end_before:
             # Convert frame to numpy array and then to torch tensor

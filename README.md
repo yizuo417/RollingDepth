@@ -1,8 +1,8 @@
 # 🛹 RllingDepth: Video Depth without Video Models
 
 [![Website](doc/badges/badge-website.svg)](https://rollingdepth.github.io)
-[![arXiv](https://img.shields.io/badge/arXiv-PDF-b31b1b)]()
 [![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-green)](https://huggingface.co/prs-eth/rollingdepth-v1-0)
+<!-- [![arXiv](https://img.shields.io/badge/arXiv-PDF-b31b1b)]() -->
 
 This repository represents the official implementation of the paper titled "Video Depth without Video Models".
 
@@ -22,7 +22,7 @@ This repository represents the official implementation of the paper titled "Vide
 
 
 ## 📢 News
-2024-11-XX: Inference code is released.<br>
+2024-11-28: Inference code is released.<br>
 
 
 
@@ -64,8 +64,7 @@ All scripts are designed to run from the project root directory.
 ### 📷 Prepare input videos
 1. Use sample videos:
     ```bash
-    # TODO: 
-    # bash script/download_sample_data.sh
+    bash script/download_sample_data.sh
     ```
 
 1. Or place your videos in a directory, for example, under `data/samples`.
@@ -74,7 +73,7 @@ All scripts are designed to run from the project root directory.
 ```bash
 python run_video.py \
     -i data/samples \
-    -o output/debug/full \
+    -o output/samples_fast \
     -p fast \
     --save-npy true \
     --verbose

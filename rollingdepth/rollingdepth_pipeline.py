@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-11-27
+# Last modified: 2024-11-28
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ from typing import Dict, List, Union
 
 import einops
 import torch
+from torchvision.transforms import InterpolationMode
+from torchvision.transforms.functional import resize
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
@@ -151,7 +153,25 @@ class RollingDepthPipeline(DiffusionPipeline):
 
         # ----------------- Resize back -----------------
         if restore_res:
-            raise NotImplementedError()
+            if verbose:
+                logging.info(f"Resizing to the original resolution: {original_res}")
+            # Restore RGB resolution
+            input_rgb = pipe_output.input_rgb
+            input_rgb = resize(
+                input_rgb,
+                list(original_res),
+                interpolation=InterpolationMode.__getitem__(resample_method),
+            )
+            pipe_output.input_rgb = input_rgb
+
+            # Restore depth resolution
+            depth_pred = pipe_output.depth_pred
+            depth_pred = resize(
+                depth_pred,
+                list(original_res),
+                interpolation=InterpolationMode.__getitem__(resample_method),
+            )
+            pipe_output.depth_pred = depth_pred
 
         return pipe_output
 
