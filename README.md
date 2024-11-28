@@ -1,4 +1,4 @@
-# 🛹 RllingDepth: Video Depth without Video Models
+# 🛹 RollingDepth: Video Depth without Video Models
 
 [![Website](doc/badges/badge-website.svg)](https://rollingdepth.github.io)
 [![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-green)](https://huggingface.co/prs-eth/rollingdepth-v1-0)
