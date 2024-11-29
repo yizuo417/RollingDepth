@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-11-28
+# Last modified: 2024-11-29
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,12 +30,12 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 from diffusers import (
-    AutoencoderKL,
-    DDIMScheduler,
-    DiffusionPipeline,
-    UNet2DConditionModel,
+    AutoencoderKL,  # type: ignore
+    DDIMScheduler,  # type: ignore
+    DiffusionPipeline,  # type: ignore
+    UNet2DConditionModel,  # type: ignore
 )
-from diffusers.utils import BaseOutput
+from diffusers.utils import BaseOutput  # type: ignore
 
 from .depth_aligner import DepthAligner
 from .video_io import load_video_frames
@@ -240,6 +240,23 @@ class RollingDepthPipeline(DiffusionPipeline):
         if [1] * len(dilations) != strides:
             raise NotImplementedError("Only implemented for stride 1")
 
+        # Cap dilation
+        seq_len = input_frames.shape[1]
+        if cap_dilation:
+            for i, dilation in enumerate(dilations):
+                dilations[i] = self.cap_max_dilation(
+                    seq_len=seq_len,
+                    snippet_len=snippet_lengths[i],
+                    dilation=dilation,
+                    verbose=verbose,
+                )
+            refine_start_dilation = self.cap_max_dilation(
+                seq_len=seq_len,
+                snippet_len=refine_snippet_len,
+                dilation=refine_start_dilation,
+                verbose=verbose,
+            )
+
         # ----------------- Initial prediction -----------------
         device = self.device
 
@@ -384,8 +401,6 @@ class RollingDepthPipeline(DiffusionPipeline):
                 dilation_start=dilation,
                 dilation_end=dilation,
                 stride=stride,
-                cap_dilation=cap_dilation,
-                verbose=verbose,
             )
 
             # >> Go through snippets >>
@@ -456,8 +471,6 @@ class RollingDepthPipeline(DiffusionPipeline):
         dilation_start: int,
         dilation_end: int,
         stride: int,
-        cap_dilation: bool,
-        verbose: bool,
     ) -> List[List[int]]:
         gap_start = dilation_start - 1
         gap_end = dilation_end - 1
@@ -468,21 +481,6 @@ class RollingDepthPipeline(DiffusionPipeline):
 
         total_step = len(timesteps)
         gap_cur = int((1 - (i_step) / total_step) * (gap_start - gap_end) + gap_end)
-
-        # Cap by sequence_len
-        max_allowed_gap = int(seq_len / snippet_len) - 1
-        if max_allowed_gap < gap_cur:
-            if cap_dilation:
-                temp_msg = f"{gap_cur = } is too big for {seq_len} frames. Reduced to {max_allowed_gap = }"
-                if verbose:
-                    logging.info(temp_msg)
-                else:
-                    logging.debug(temp_msg)
-                gap_cur = min(max_allowed_gap, gap_cur)
-            else:
-                logging.warning(
-                    f"{gap_cur = } is too big for {seq_len} frames. Consider reducing dilation or set `cap_dilation` to True."
-                )
 
         # Generate snippet indice
         snippet_idx_ls = []
@@ -502,6 +500,19 @@ class RollingDepthPipeline(DiffusionPipeline):
                 "Not every frame is covered. Consider reducing dilation for short videos"
             )
         return snippet_idx_ls
+
+    @staticmethod
+    def cap_max_dilation(seq_len: int, snippet_len: int, dilation: int, verbose: bool):
+        # Cap by sequence_len
+        max_allowed_gap = int(seq_len / snippet_len) - 1
+        if max_allowed_gap < dilation:
+            temp_msg = f"{dilation = } is too big for {seq_len} frames. Reduced to {max_allowed_gap}"
+            if verbose:
+                logging.info(temp_msg)
+            else:
+                logging.debug(temp_msg)
+            dilation = min(max_allowed_gap, dilation)
+        return dilation
 
     def refine(
         self,
@@ -566,8 +577,6 @@ class RollingDepthPipeline(DiffusionPipeline):
                 dilation_start=start_dilation,
                 dilation_end=1,
                 stride=1,
-                cap_dilation=True,
-                verbose=verbose,
             )
 
             t_current = timesteps[i_step]
