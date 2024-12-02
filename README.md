@@ -2,7 +2,7 @@
 
 [![Website](doc/badges/badge-website.svg)](https://rollingdepth.github.io)
 [![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-green)](https://huggingface.co/prs-eth/rollingdepth-v1-0)
-<!-- [![arXiv](https://img.shields.io/badge/arXiv-PDF-b31b1b)]() -->
+[![arXiv](https://img.shields.io/badge/arXiv-PDF-b31b1b)](http://arxiv.org/abs/2411.19189)
 
 This repository represents the official implementation of the paper titled "Video Depth without Video Models".
 
@@ -22,6 +22,7 @@ This repository represents the official implementation of the paper titled "Vide
 
 
 ## 📢 News
+2024-12-02: Paper is on arXiv.<br>
 2024-11-28: Inference code is released.<br>
 
 
@@ -109,8 +110,18 @@ bash script/download_weight.sh
 Coming soon
 
 
-<!-- ## 🎓 Citation
-TODO -->
+## 🎓 Citation
+```bibtex
+@misc{ke2024rollingdepth,
+    title={Video Depth without Video Models}, 
+    author={Bingxin Ke and Dominik Narnhofer and Shengyu Huang and Lei Ke and Torben Peters and Katerina Fragkiadaki and Anton Obukhov and Konrad Schindler},
+    year={2024},
+    eprint={2411.19189},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV},
+    url={https://arxiv.org/abs/2411.19189}, 
+}
+```
 
 
 ## 🙏 Acknowledgments
