@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-11-28
+# Last modified: 2024-12-02
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -374,7 +374,7 @@ if "__main__" == __name__:
                 "refine_step": 0,
             }
         ),
-        "fasthr": OmegaConf.create(
+        "fast1024": OmegaConf.create(
             {
                 "res": 1024,
                 "dilations": [1, 25],
