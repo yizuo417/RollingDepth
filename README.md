@@ -1,8 +1,9 @@
 # 🛹 RollingDepth: Video Depth without Video Models
 
 [![Website](doc/badges/badge-website.svg)](https://rollingdepth.github.io)
-[![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-green)](https://huggingface.co/prs-eth/rollingdepth-v1-0)
+[![Hugging Face Space](https://img.shields.io/badge/🤗%20Hugging%20Face%20-Space-yellow)](https://huggingface.co/spaces/prs-eth/rollingdepth)
 [![arXiv](https://img.shields.io/badge/arXiv-PDF-b31b1b)](http://arxiv.org/abs/2411.19189)
+[![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-green)](https://huggingface.co/prs-eth/rollingdepth-v1-0)
 
 This repository represents the official implementation of the paper titled "Video Depth without Video Models".
 
