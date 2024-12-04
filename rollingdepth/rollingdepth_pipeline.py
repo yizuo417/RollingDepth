@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-11-29
+# Last modified: 2024-12-04
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -641,7 +641,6 @@ class RollingDepthPipeline(DiffusionPipeline):
     ) -> torch.Tensor:
         assert depth_latent.shape == rgb_latent.shape
         num_view = rgb_latent.shape[1]
-        # assert 2 == num_view, f"only implemented for 2-view, got {rgb_latent.shape}"
         rgb_latent = einops.rearrange(rgb_latent, "b n c h w -> (b n) c h w")
         depth_latent = einops.rearrange(depth_latent, "b n c h w -> (b n) c h w")
 
