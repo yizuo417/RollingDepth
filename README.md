@@ -53,12 +53,11 @@ conda activate rollingdepth
 Install dependicies: 
 ```bash
 pip install -r requirements.txt
-
-# Install modified diffusers with cross-frame self-attention
-bash script/install_diffusers_dev.sh 
+bash script/install_diffusers_dev.sh  # Install modified diffusers with cross-frame self-attention
 ```
 We use [pyav](https://github.com/PyAV-Org/PyAV) for video I/O, which relies on [ffmpeg](https://www.ffmpeg.org/).
 
+To see the modification in diffusers, search for comments "Modified in RollingDepth".
 
 ## 🏃 Test on your videos
 All scripts are designed to run from the project root directory.
@@ -68,6 +67,7 @@ All scripts are designed to run from the project root directory.
     ```bash
     bash script/download_sample_data.sh
     ```
+    These example videos are to be used only as debug/demo input together with the code and should not be distributed outside of the repo.
 
 1. Or place your videos in a directory, for example, under `data/samples`.
 
@@ -88,10 +88,26 @@ python run_video.py \
 - `-i` or `--input-video`: path to input data, can be a single video file, a text file with video paths, or a directory of videos.
 - `-o` or `--output-dir`: output directory.
 
-Passing other arguments below may overwrite the preset settings:
-- Coming soon
-<!-- TODO: explain all arguments in detailed -->
+#### Passing these inference arguments will overwrite the preset settings:
+- `--res` or `--processing-resolution`: the maximum resolution (in pixels) at which image processing will be performed. If set to 0, processes at the original input image resolution.
+- `--refine-step`: number of refinement iterations to improve accuracy and details. Set to 0 to disable refinement.
+- `--snip-len` or `--snippet-lengths`: number of frames to analyze in each snippet.
+- `-d` or `--dilations`: spacing between frames for temporal analysis, could have multiple values e.g. `-d 1 10 25`.
 
+#### Clip sub-sequence to be processed:
+- `--from` or `--start-frame`: the starting frame index for processing, default to 0.
+- `--frames` or `--frame-count`: number of frames to process after the starting frame. Set to 0 (default) to process until the end of the video.
+
+#### Output settings
+- `--fps` or `--output-fps`: frame rate (FPS) for the output video. Set to 0 (default) to match the input video's frame rate.
+- `--restore-res` or `--restore-resolution`: whether to restore the output to the original input resolution after processing, Default: False.
+- `--save-sbs` or `--save-side-by-side`: whether to save side-by-side videos of RGB and colored depth. Default: False.
+- `--save-npy`: whether to save depth maps as .npy files. Default: False.
+- `--save-snippets`: whether to save initial snippets.
+
+#### Other argumenets
+- Please run `python run_video.py --help` to get details for other arguments.
+- For low GPU memory footage:  pass ` --max-vae-bs 1 --unload-snippet true` and use a smaller resolution, e.g. `--res 512`
 
 ## ⬇ Checkpoint cache
 By default, the [checkpoint](https://huggingface.co/prs-eth/rollingdepth-v1-0) is stored in the Hugging Face cache. The HF_HOME environment variable defines its location and can be overridden, e.g.:

@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-12-02
+# Last modified: 2024-12-05
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -197,7 +197,7 @@ if "__main__" == __name__:
         nargs="?",
         default=False,
         help=(
-            "Whether to save visualization snippets of the depth estimation process. "
+            "Whether to save initial snippets. "
             "Useful for debugging and quality assessment. "
             "Default: False"
         ),
@@ -229,9 +229,9 @@ if "__main__" == __name__:
             "Spacing between frames for temporal analysis. "
             "Set to None to use preset configurations based on video length. "
             "Custom configurations: "
-            "- [1, 10, 25]: Best accuracy, slower processing "
-            "- [1, 25]: Balanced speed and accuracy "
-            "- [1, 10]: For short videos (<78 frames) "
+            "`1 10 25`: Best accuracy, slower processing "
+            "`1 25`: Balanced speed and accuracy "
+            "`1 10`: For short videos (<78 frames) "
             "Default: None (auto-select based on video length)"
         ),
         dest="dilations",
@@ -271,7 +271,7 @@ if "__main__" == __name__:
         choices=[2, 3, 4],
         default=None,
         help=(
-            "Number of consecutive frames to analyze in each temporal window. "
+            "Number of frames to analyze in each temporal window (snippet). "
             "Set to None to use preset value (3). "
             "Can specify multiple values corresponding to different dilation rates. "
             "Example: '--dilations 1 25 --snippet-length 2 3' uses "
@@ -286,11 +286,11 @@ if "__main__" == __name__:
         type=int,
         default=None,
         help=(
-            "Number of refinement iterations to improve depth estimation accuracy. "
-            "Set to None to use preset configuration. "
+            "Number of refinement iterations to improve accuracy and details. "
+            "Leave as unset (None) to use preset configuration. "
             "Set to 0 to disable refinement. "
             "Higher values may improve accuracy but increase processing time. "
-            "Default: None (uses 0, no refinement)"
+            "Default: None"
         ),
         dest="refine_step",
     )
