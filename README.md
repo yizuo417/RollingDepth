@@ -55,7 +55,7 @@ Install dependicies:
 pip install -r requirements.txt
 bash script/install_diffusers_dev.sh  # Install modified diffusers with cross-frame self-attention
 ```
-We use [pyav](https://github.com/PyAV-Org/PyAV) for video I/O, which relies on [ffmpeg](https://www.ffmpeg.org/).
+We use [pyav](https://github.com/PyAV-Org/PyAV) for video I/O, which relies on [ffmpeg](https://www.ffmpeg.org/) (tested with version 5.1.6-0+deb12u1).
 
 To see the modification in diffusers, search for comments "Modified in RollingDepth".
 
