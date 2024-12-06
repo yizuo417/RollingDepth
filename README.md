@@ -101,9 +101,9 @@ python run_video.py \
 #### Output settings
 - `--fps` or `--output-fps`: frame rate (FPS) for the output video. Set to 0 (default) to match the input video's frame rate.
 - `--restore-res` or `--restore-resolution`: whether to restore the output to the original input resolution after processing, Default: False.
-- `--save-sbs` or `--save-side-by-side`: whether to save side-by-side videos of RGB and colored depth. Default: False.
-- `--save-npy`: whether to save depth maps as .npy files. Default: False.
-- `--save-snippets`: whether to save initial snippets.
+- `--save-sbs` or `--save-side-by-side`: whether to save side-by-side videos of RGB and colored depth. Default: True.
+- `--save-npy`: whether to save depth maps as .npy files. Default: True.
+- `--save-snippets`: whether to save initial snippets. Default: False
 
 #### Other argumenets
 - Please run `python run_video.py --help` to get details for other arguments.
