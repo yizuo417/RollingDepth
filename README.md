@@ -77,7 +77,6 @@ python run_video.py \
     -i data/samples \
     -o output/samples_fast \
     -p fast \
-    --save-npy true \
     --verbose
 ```
 - `-p` or `--preset`: preset options
