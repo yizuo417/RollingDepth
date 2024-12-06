@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-12-05
+# Last modified: 2024-12-06
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -77,7 +77,8 @@ if "__main__" == __name__:
         "--preset",
         type=str,
         choices=["fast", "fast1024", "full", "paper", "none"],
-        help="Inference preset. TODO: write detailed explanation",
+        default="fast",
+        help="Inference presets.",
     )
     parser.add_argument(
         "--start-frame",
