@@ -130,23 +130,27 @@ class DepthAligner:
         H, W = snippet_ls[0].shape[-2], snippet_ls[0].shape[-1]
         print("原来的H和W:",(H,W))
         windows = [triplet.shape[1] for triplet in snippet_ls]
-        print("windows:",windows)
+        
         for triplet in snippet_ls:
         # 假设 w 的值已知，但 H 和 W 未知
             print("****************************")
             print(triplet.shape)  # 调试打印实际形状
             print(triplet.numel())  # 检查总元素数
+        w = triplet.shape[1]
+        # 自动推导 H * W
+        #H_W = triplet.numel() // (triplet.shape[0] * w)
+        # 动态调整 H 和 W
+        H_W = triplet.numel() // (triplet.shape[0] * triplet.shape[1]* triplet.shape[2])
+        
+
+        
 
         snippet_ls = [
-            triplet.reshape(triplet.shape[0], w, H * W)
+            #triplet.reshape(triplet.shape[0], w, H * W)
+            #triplet.reshape(triplet.shape[0], w, H_W)
+            triplet.reshape(triplet.shape[0], w, triplet.shape[3]* triplet.shape[4])
             for triplet, w in zip(snippet_ls, windows)
         ]
-        for triplet in snippet_ls:
-        # 假设 w 的值已知，但 H 和 W 未知
-            print("**********reshape 后的******************")
-            print(triplet.shape)  # 调试打印实际形状
-            print(triplet.numel())  # 检查总元素数
-
         scales = [
             torch.ones(A.shape[0], 1, 1, device=device, requires_grad=True)
             for A in snippet_ls

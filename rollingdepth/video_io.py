@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-12-09
+# Last modified: 2024-11-28
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,10 +18,13 @@
 # More information about the method can be found at https://rollingdepth.github.io
 # ---------------------------------------------------------------------------------
 
-import fractions
 import logging
 from os import PathLike
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple, List
+import os
+import numpy as np
+from PIL import Image
+
 
 import av
 import einops
@@ -137,7 +140,7 @@ def load_video_frames(
 def write_video_from_numpy(
     frames: np.ndarray,  # shape [n h w 3]
     output_path: PathLike,
-    fps: float = 30.0,
+    fps: int = 30,
     codec: Optional[str] = None,  # Let PyAV choose default codec
     crf: int = 23,
     preset: str = "medium",
@@ -156,13 +159,11 @@ def write_video_from_numpy(
     else:
         codecs_to_try = [codec]
 
-    fps_rational = fractions.Fraction(fps).limit_denominator()
-
     # Try available codecs
     for try_codec in codecs_to_try:
         try:
             container = av.open(output_path, mode="w")
-            stream = container.add_stream(try_codec, rate=fps_rational)
+            stream = container.add_stream(try_codec, rate=fps)
             if verbose:
                 logging.info(f"Using codec: {try_codec}")
             break

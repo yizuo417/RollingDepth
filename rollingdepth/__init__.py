@@ -20,6 +20,9 @@
 
 
 from .rollingdepth_pipeline import RollingDepthOutput, RollingDepthPipeline  # noqa: F401
+from .my_rollingdepth_pipeline import RollingDepthOutput, RollingDepthPipeline
+from .rollingimg_pipeline import RollingDepthOutput, RollingDepthPipeline
+#from .iclight_pipeline import RollingDepthOutput, RollingDepthPipeline
 from .video_io import (
     resize_max_res,  # noqa: F401
     load_video_frames,  # noqa: F401

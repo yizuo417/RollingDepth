@@ -44,10 +44,13 @@ from .video_io import load_video_frames
 class RollingDepthOutput(BaseOutput):
     input_rgb: torch.Tensor
     depth_pred: torch.Tensor
+    R_pred : torch.Tensor
+    G_pred : torch.Tensor
+    B_pred : torch.Tensor
+    aligned_snippet_pred_ls: Union[None, List[torch.Tensor]]
     # intermediate results
     snippet_ls: Union[None, List[torch.Tensor]]
     depth_coaligned: Union[None, torch.Tensor]
-
 
 class RollingDepthPipeline(DiffusionPipeline):
     rgb_latent_scale_factor = 0.18215
@@ -300,6 +303,8 @@ class RollingDepthPipeline(DiffusionPipeline):
             unload_snippet=unload_snippet,
             verbose=verbose,
         )
+        print("snippet_pred_ls 的 shape before alignment",snippet_pred_ls[0].shape)
+        print("snippet_pred_ls 的 length before alignment",snippet_lengths)
         
         # ----------------- Co-alignment -----------------
         coalign_kwargs = {} if coalign_kwargs is None else coalign_kwargs
@@ -308,14 +313,72 @@ class RollingDepthPipeline(DiffusionPipeline):
             device=device,
             **coalign_kwargs,
         )
-        (depth_coaligned, scales, translations, loss_history) = depth_aligner.run(
-            snippet_ls=snippet_pred_ls, dilations=dilations
-        )
+         ########################################
+        #对每个通道单独对齐
 
+        aligned_snippet_pred_ls = []  # 保存对齐后的片段
+
+                # 定义存储每个通道的列表
+        r_list = []
+        g_list = []
+        b_list = []
+
+        # 遍历 snippet_pred_ls 中的每个 triplet
+        for triplets in snippet_pred_ls:
+            # 打印 triplets 的形状，确保它是 [B, N, 3, H, W]
+            print(triplets.shape)
+
+            # 分离为 R、G、B 通道 [B, N, 1, H, W]
+            r_channel, g_channel, b_channel = triplets.split(1, dim=2)  
+            print(r_channel.shape)
+            print(g_channel.shape)
+            print(b_channel.shape)
+
+            # 将每个通道添加到对应的列表中
+            r_list.append(r_channel)
+            g_list.append(g_channel)
+            b_list.append(b_channel)
+            # 分别对 R、G、B 通道进行 align 操作
+        (R_coaligned, scales, translations, loss_history) = depth_aligner.run(
+        snippet_ls=r_list, dilations=dilations
+    )
         # Re-normalize
-        depth_coaligned -= depth_coaligned.min()
-        depth_coaligned /= depth_coaligned.max()
-        depth_coaligned = depth_coaligned * 2.0 - 1.0
+        R_coaligned -= R_coaligned.min()
+        R_coaligned /= R_coaligned.max()
+        R_coaligned = R_coaligned * 2.0 - 1.0
+
+        (G_coaligned, scales, translations, loss_history) = depth_aligner.run(
+        snippet_ls=g_list, dilations=dilations
+    )
+        # Re-normalize
+        G_coaligned -= G_coaligned.min()
+        G_coaligned /= G_coaligned.max()
+        G_coaligned = G_coaligned * 2.0 - 1.0
+
+        (B_coaligned, scales, translations, loss_history) = depth_aligner.run(
+        snippet_ls=b_list, dilations=dilations
+    )
+        # Re-normalize
+        B_coaligned -= B_coaligned.min()
+        B_coaligned /= B_coaligned.max()
+        B_coaligned = B_coaligned * 2.0 - 1.0
+        # # 将对齐后的通道合并回 RGB 图像
+        aligned_triplets = torch.cat([R_coaligned, G_coaligned, B_coaligned], dim=2)  # [B, N, 3, H, W]
+
+        # # 保存到新的列表
+        aligned_snippet_pred_ls.append(aligned_triplets)
+
+        # # 返回对齐后的片段列表
+        # return aligned_snippet_pred_ls
+
+        #(depth_coaligned, scales, translations, loss_history) = depth_aligner.run(
+        #     snippet_ls=snippet_pred_ls, dilations=dilations
+        # )
+
+        # # Re-normalize
+        # depth_coaligned -= depth_coaligned.min()
+        # depth_coaligned /= depth_coaligned.max()
+        # depth_coaligned = depth_coaligned * 2.0 - 1.0
 
         torch.cuda.empty_cache()
 
@@ -342,16 +405,24 @@ class RollingDepthPipeline(DiffusionPipeline):
                 depth_latent_new, max_batch_size=max_vae_bs, verbose=verbose
             )
         else:
-            depth_pred = depth_coaligned
+            #depth_pred = depth_coaligned
+            R_pred = R_coaligned
+            G_pred = G_coaligned
+            B_pred = B_coaligned
 
         # ----------------- Output -----------------
         pipe_out = RollingDepthOutput(
             input_rgb=input_frames.detach().cpu().squeeze(0) / 2.0 + 0.5,
-            depth_pred=depth_pred.detach().cpu().squeeze(0),
+            #depth_pred=depth_pred.detach().cpu().squeeze(0),
+            R_pred=R_pred.detach().cpu().squeeze(0)/2.0 + 0.5,
+            G_pred=G_pred.detach().cpu().squeeze(0)/2.0 + 0.5,
+            B_pred=B_pred.detach().cpu().squeeze(0)/2.0 + 0.5,
             snippet_ls=[snippet.detach().cpu() for snippet in snippet_pred_ls],
-            depth_coaligned=depth_coaligned.detach().cpu().squeeze(0),
+            #depth_coaligned=depth_coaligned.detach().cpu().squeeze(0),
+            aligned_snippet_pred_ls=[aligned_triplets.detach().cpu()for aligned_triplets in aligned_snippet_pred_ls],
         )
         return pipe_out
+
 
     def init_snippet_infer(
         self,
@@ -405,6 +476,9 @@ class RollingDepthPipeline(DiffusionPipeline):
 
             # >> Go through snippets >>
             depth_snippet_latent_ls = []
+            #********************************
+            rgb_snippet_latent_ls = []
+            #********************************
             snippet_iterable = snippet_idx_ls
             if verbose:
                 snippet_iterable = tqdm(
@@ -442,15 +516,28 @@ class RollingDepthPipeline(DiffusionPipeline):
                     _scheduler_output = self.scheduler.step(
                         noise_pred, t_current, depth_latent_snippet
                     )
+                    # _scheduler_output = self.scheduler.step(
+                    #     noise_pred, t_current, rgb_latent_snippet
+                    # )
                     depth_latent_snippet = _scheduler_output.prev_sample
+                    #rgb_latent_snippet = _scheduler_output.prev_sample
                 depth_snippet_latent_ls.append(depth_latent_snippet)
+                rgb_snippet_latent_ls.append(rgb_latent_snippet)
+                #rgb_snippet_latent_ls.append(rgb_latent_snippet)
             # << Go through snippets <<
-            depth_snippet_latent = torch.concat(depth_snippet_latent_ls, dim=0)
+            #depth_snippet_latent = torch.concat(depth_snippet_latent_ls, dim=0)
+            rgb_snippet_latent = torch.concat(rgb_snippet_latent_ls, dim=0)
 
-            # Decode to depth
-            del depth_snippet_latent_ls
+            # # Decode to depth
+            # del depth_snippet_latent_ls
+            # triplets_decoded = self.decode_depth(
+            #     depth_snippet_latent, max_batch_size=max_vae_bs, verbose=verbose
+            # )
+
+            # Decode to rgb_img
+            del rgb_snippet_latent_ls
             triplets_decoded = self.decode_depth(
-                depth_snippet_latent, max_batch_size=max_vae_bs, verbose=verbose
+                rgb_snippet_latent, max_batch_size=max_vae_bs, verbose=verbose
             )
 
             # moved to CPU to save vram
@@ -646,8 +733,14 @@ class RollingDepthPipeline(DiffusionPipeline):
         depth_latent = einops.rearrange(depth_latent, "b n c h w -> (b n) c h w")
 
         # Concat rgb and depth latents
-        unet_input = torch.cat([rgb_latent, depth_latent], dim=1)  # [N, 8, h, w]
+        #unet_input = torch.cat([rgb_latent, depth_latent], dim=1)  # [N, 8, h, w]
+        #**********************************
+        unet_input = torch.cat([rgb_latent, rgb_latent], dim=1)  # [N, 8, h, w]
+        # 使用零填充扩展到 8 通道
+        # zeros = torch.zeros_like(rgb_latent)
+        # unet_input = torch.cat([rgb_latent, zeros], dim=1)
 
+        #***********************************
         # predict the noise residual
         noise_pred = self.unet(
             unet_input,
@@ -734,7 +827,48 @@ class RollingDepthPipeline(DiffusionPipeline):
         all_decoded = torch.cat(decoded_outputs, dim=0)
 
         # mean of output channels
-        depth_mean = all_decoded.mean(dim=1, keepdim=True)
-        depth_mean = einops.rearrange(depth_mean, "(b n) c h w -> b n c h w", n=N)
+        #depth_mean = all_decoded.mean(dim=1, keepdim=True)
+       
+        depth_mean = einops.rearrange(all_decoded, "(b n) c h w -> b n c h w", n=N)
 
         return depth_mean
+    
+    def decode_rgb(
+        self, rgb_latent: torch.Tensor, max_batch_size: int, verbose: bool = False
+    ) -> torch.Tensor:
+        self.vae = self.vae.to(self.device)
+
+        B, N, C, H, W = rgb_latent.shape
+
+        # 展平批次和序列维度
+        rgb_latent = einops.rearrange(rgb_latent, "b n c h w -> (b n) c h w")
+
+        # 缩放 latent 特征
+        rgb_latent = rgb_latent / self.rgb_latent_scale_factor
+
+        # 分批解码
+        decoded_outputs = []
+        iterable = range(0, B * N, max_batch_size)
+        if verbose:
+            iterable = tqdm(
+                iterable,
+                total=len(list(iterable)),
+                leave=False,
+                desc=" " * 4 + "Decoding RGB",
+            )
+        for i in iterable:
+            batch = rgb_latent[i : i + max_batch_size]
+            # decode
+            z = self.vae.post_quant_conv(batch)
+            stacked = self.vae.decoder(z)
+            decoded_outputs.append(stacked)
+
+        # 合并所有批次
+        all_decoded = torch.cat(decoded_outputs, dim=0)
+        
+        # 还原形状到 [B, N, C, H, W]
+        decoded_rgb = einops.rearrange(all_decoded, "(b n) c h w -> b n c h w", n=N)
+        print("decoded_rgb shape:",decoded_rgb[0].shape)
+
+        return decoded_rgb
+
