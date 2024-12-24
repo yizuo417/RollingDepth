@@ -5,7 +5,7 @@ The inference code was tested on: Debian 12, Python 3.12.7 (venv), CUDA 12.4, Ge
 
 ### 📦 Repository
 ```bash
-git clone https://github.com/prs-eth/RollingDepth.git
+git clone https://github.com/yizuo417/RollingDepth.git
 cd RollingDepth
 ```
 
