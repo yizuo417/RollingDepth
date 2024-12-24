@@ -1,5 +1,5 @@
 # Copyright 2024 Bingxin Ke, ETH Zurich. All rights reserved.
-# Last modified: 2024-12-09
+# Last modified: 2024-11-28
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,9 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import torch
+import numpy as np
+import cv2  # OpenCV，用于保存视频
 
 import numpy as np
 import torch
@@ -39,6 +42,42 @@ from rollingdepth import (
 from src.util.colorize import colorize_depth_multi_thread
 from src.util.config import str2bool
 
+def save_snippets_as_video(aligned_snippet_pred_ls, output_path, fps=30):
+    """
+    将对齐的片段列表保存为视频。
+
+    Args:
+        aligned_snippet_pred_ls (list): 对齐的片段列表，每个元素形状为 [B, N, 3, H, W]。
+        output_path (str): 输出视频的路径。
+        fps (int): 视频帧率。
+    """
+    # 确保片段按时间顺序合并
+    all_frames = []
+
+    for snippet in aligned_snippet_pred_ls:
+        # snippet 的形状为 [B, N, 3, H, W]
+        # 提取第一批 (B=0) 的帧 [N, 3, H, W]
+        snippet_frames = snippet[0]  # 假设我们只可视化 batch 中第一个样本
+        snippet_frames = snippet_frames.permute(0, 2, 3, 1).cpu().numpy()  # [N, H, W, 3]
+
+        # 将像素值从 [-1, 1] 或 [0, 1] 范围映射到 [0, 255]
+        snippet_frames = (snippet_frames * 255).clip(0, 255).astype(np.uint8)
+
+        all_frames.extend(snippet_frames)  # 将当前片段的帧添加到总帧列表中
+
+    # 确认视频分辨率（假设所有帧大小一致）
+    height, width, _ = all_frames[0].shape
+
+    # 使用 OpenCV 保存为视频
+    video_writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+
+    for frame in all_frames:
+        video_writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))  # 转换为 BGR 格式
+
+    video_writer.release()
+    print(f"Video saved to {output_path}")
+
+
 if "__main__" == __name__:
     logging.basicConfig(level=logging.INFO)
 
@@ -47,8 +86,8 @@ if "__main__" == __name__:
         description="Run video depth estimation using RollingDepth."
     )
     parser.add_argument(
-        "-i",
-        "--input-video",
+        "-fi",
+        "--input-fg-video",
         type=str,
         required=True,
         help=(
@@ -58,7 +97,21 @@ if "__main__" == __name__:
             "- Directory path containing video files "
             "Required argument."
         ),
-        dest="input_video",
+        dest="input_fg_video",
+    )
+    parser.add_argument(
+        "-bi",
+        "--input-bg-video",
+        type=str,
+        required=True,
+        help=(
+            "Path to the input video(s) to be processed. Accepts: "
+            "- Single video file path (e.g., 'video.mp4') "
+            "- Text file containing a list of video paths (one per line) "
+            "- Directory path containing video files "
+            "Required argument."
+        ),
+        dest="input_bg_video",
     )
     parser.add_argument(
         "-o",
@@ -77,8 +130,7 @@ if "__main__" == __name__:
         "--preset",
         type=str,
         choices=["fast", "fast1024", "full", "paper", "none"],
-        default="fast",
-        help="Inference presets.",
+        help="Inference preset. TODO: write detailed explanation",
     )
     parser.add_argument(
         "--start-frame",
@@ -109,7 +161,7 @@ if "__main__" == __name__:
         "-c",
         "--checkpoint",
         type=str,
-        default="prs-eth/rollingdepth-v1-0",
+        default="/workspace/pyz/RollingDepth/models/stablediffusionapi-realistic-vision-v51",
         help=(
             "Path to the model checkpoint to use for inference. Can be either: "
             "- A local path to checkpoint files "
@@ -147,7 +199,7 @@ if "__main__" == __name__:
     parser.add_argument(
         "--fps",
         "--output-fps",
-        type=float,
+        type=int,
         default=0,
         help=(
             "Frame rate (FPS) for the output video. "
@@ -198,7 +250,7 @@ if "__main__" == __name__:
         nargs="?",
         default=False,
         help=(
-            "Whether to save initial snippets. "
+            "Whether to save visualization snippets of the depth estimation process. "
             "Useful for debugging and quality assessment. "
             "Default: False"
         ),
@@ -230,9 +282,9 @@ if "__main__" == __name__:
             "Spacing between frames for temporal analysis. "
             "Set to None to use preset configurations based on video length. "
             "Custom configurations: "
-            "`1 10 25`: Best accuracy, slower processing "
-            "`1 25`: Balanced speed and accuracy "
-            "`1 10`: For short videos (<78 frames) "
+            "- [1, 10, 25]: Best accuracy, slower processing "
+            "- [1, 25]: Balanced speed and accuracy "
+            "- [1, 10]: For short videos (<78 frames) "
             "Default: None (auto-select based on video length)"
         ),
         dest="dilations",
@@ -272,7 +324,7 @@ if "__main__" == __name__:
         choices=[2, 3, 4],
         default=None,
         help=(
-            "Number of frames to analyze in each temporal window (snippet). "
+            "Number of consecutive frames to analyze in each temporal window. "
             "Set to None to use preset value (3). "
             "Can specify multiple values corresponding to different dilation rates. "
             "Example: '--dilations 1 25 --snippet-length 2 3' uses "
@@ -287,11 +339,11 @@ if "__main__" == __name__:
         type=int,
         default=None,
         help=(
-            "Number of refinement iterations to improve accuracy and details. "
-            "Leave as unset (None) to use preset configuration. "
+            "Number of refinement iterations to improve depth estimation accuracy. "
+            "Set to None to use preset configuration. "
             "Set to 0 to disable refinement. "
             "Higher values may improve accuracy but increase processing time. "
-            "Default: None"
+            "Default: None (uses 0, no refinement)"
         ),
         dest="refine_step",
     )
@@ -427,7 +479,8 @@ if "__main__" == __name__:
             len(args.color_maps) > 0
         ), "No color map is given, can not save side-by-side videos."
 
-    input_video = Path(args.input_video)
+    input_fg_video = Path(args.input_fg_video)
+    input_bg_video = Path(args.input_bg_video)
     output_dir = Path(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -440,18 +493,31 @@ if "__main__" == __name__:
     logging.info(f"device = {device}")
 
     # -------------------- Data --------------------
-    if input_video.is_dir():
-        input_video_ls = os.listdir(input_video)
-        input_video_ls = [input_video.joinpath(v_name) for v_name in input_video_ls]
-    elif ".txt" == input_video.suffix:
-        with open(input_video, "r") as f:
-            input_video_ls = f.readlines()
-        input_video_ls = [Path(s.strip()) for s in input_video_ls]
+    if input_fg_video.is_dir():
+        input_fg_video_ls = os.listdir(input_fg_video)
+        input_fg_video_ls = [input_fg_video.joinpath(v_name) for v_name in input_fg_video_ls]
+    elif ".txt" == input_fg_video.suffix:
+        with open(input_fg_video, "r") as f:
+            input_fg_video_ls = f.readlines()
+        input_fg_video_ls = [Path(s.strip()) for s in input_fg_video_ls]
     else:
-        input_video_ls = [Path(input_video)]
-    input_video_ls = sorted(input_video_ls)
+        input_fg_video_ls = [Path(input_fg_video)]
+    input_fg_video_ls = sorted(input_fg_video_ls)
 
-    logging.info(f"Found {len(input_video_ls)} videos.")
+    logging.info(f"Found {len(input_fg_video_ls)} videos.")
+
+    if input_bg_video.is_dir():
+        input_bg_video_ls = os.listdir(input_bg_video)
+        input_bg_video_ls = [input_bg_video.joinpath(v_name) for v_name in input_bg_video_ls]
+    elif ".txt" == input_bg_video.suffix:
+        with open(input_bg_video, "r") as f:
+            input_bg_video_ls = f.readlines()
+        input_bg_video_ls = [Path(s.strip()) for s in input_bg_video_ls]
+    else:
+        input_bg_video_ls = [Path(input_bg_video)]
+    input_bg_video_ls = sorted(input_bg_video_ls)
+
+    logging.info(f"Found {len(input_bg_video_ls)} videos.")
 
     # -------------------- Model --------------------
     if "fp16" == args.dtype:
@@ -476,121 +542,164 @@ if "__main__" == __name__:
     # -------------------- Inference and saving --------------------
     with torch.no_grad():
         if args.verbose:
-            video_iterable = tqdm(input_video_ls, desc="Processing videos", leave=True)
+            fg_video_iterable = tqdm(input_fg_video_ls, desc="Processing videos", leave=True)
+            bg_video_iterable = tqdm(input_bg_video_ls, desc="Processing videos", leave=True)
         else:
-            video_iterable = input_video_ls
-        for video_path in video_iterable:
-            # Random number generator
-            if args.seed is None:
-                generator = None
-            else:
-                generator = torch.Generator(device=device)
-                generator.manual_seed(args.seed)
+            fg_video_iterable = input_fg_video_ls
+            bg_video_iterable = input_bg_video_ls
+        for fg_video_path in fg_video_iterable:
+            for bg_video_path in bg_video_iterable:
+                # Random number generator
+                if args.seed is None:
+                    generator = None
+                else:
+                    generator = torch.Generator(device=device)
+                    generator.manual_seed(args.seed)
 
-            # Predict depth
-            pipe_out: RollingDepthOutput = pipe(
-                # input setting
-                input_video_path=video_path,
-                start_frame=args.start_frame,
-                frame_count=args.frame_count,
-                processing_res=args.res,
-                resample_method=args.resample_method,
-                # infer setting
-                dilations=list(args.dilations),
-                cap_dilation=args.cap_dilation,
-                snippet_lengths=list(args.snippet_lengths),
-                init_infer_steps=[1],
-                strides=[1],
-                coalign_kwargs=None,
-                refine_step=args.refine_step,
-                refine_snippet_len=args.refine_snippet_len,
-                refine_start_dilation=args.refine_start_dilation,
-                # other settings
-                generator=generator,
-                verbose=args.verbose,
-                max_vae_bs=args.max_vae_bs,
-                # output settings
-                restore_res=args.restore_res,
-                unload_snippet=args.unload_snippet,
-            )
+                # Predict depth
+                pipe_out: RollingDepthOutput = pipe(
+                    # input setting
+                    input_fg_video_path=fg_video_path,
+                    input_bg_video_path=bg_video_path,
+                    start_frame=args.start_frame,
+                    frame_count=args.frame_count,
+                    processing_res=args.res,
+                    resample_method=args.resample_method,
+                    # infer setting
+                    dilations=list(args.dilations),
+                    cap_dilation=args.cap_dilation,
+                    snippet_lengths=list(args.snippet_lengths),
+                    init_infer_steps=[1],
+                    strides=[1],
+                    coalign_kwargs=None,
+                    refine_step=args.refine_step,
+                    refine_snippet_len=args.refine_snippet_len,
+                    refine_start_dilation=args.refine_start_dilation,
+                    # other settings
+                    generator=generator,
+                    verbose=args.verbose,
+                    max_vae_bs=args.max_vae_bs,
+                    # output settings
+                    restore_res=args.restore_res,
+                    unload_snippet=args.unload_snippet,
+                )
 
-            depth_pred = pipe_out.depth_pred  # [N 1 H W]
+            #depth_pred = pipe_out.depth_pred  # [N 1 H W]
+            R_pred = pipe_out.R_pred
+            G_pred = pipe_out.G_pred
+            B_pred = pipe_out.B_pred
+            rgb_pred = pipe_out.aligned_snippet_pred_ls
+            snippet_ls =pipe_out.snippet_ls
+            
+
+            print("**************************")
+            print("rgb_pred[0]的shape",rgb_pred[0].shape)
+            print("rgb_pred[0][0]的shape",rgb_pred[0][0].shape)
+            print("rgb_pred[0][1]的shape",rgb_pred[0][1].shape)
+            print("**************************")
+            print("R_pred的shape",R_pred.shape)
+            print("G_pred的shape",G_pred.shape)
+            print("B_pred的shape",B_pred.shape)
 
             os.makedirs(output_dir, exist_ok=True)
 
-            # Save prediction as npy
-            if args.save_npy:
-                save_to = output_dir.joinpath(f"{video_path.stem}_pred.npy")
-                if args.verbose:
-                    logging.info(f"Saving predictions to {save_to}")
-                np.save(save_to, depth_pred.numpy().squeeze(1))  # [N H W]
+            combined_pred = torch.cat((R_pred, G_pred, B_pred), dim=1)#[N 3 H W]
+            # 假设 combined_pred 是 [N, 3, H, W] 的张量
+            combined_pred = combined_pred.detach().cpu()
 
-            # Save intermediate snippets
-            if args.save_snippets and pipe_out.snippet_ls is not None:
-                save_to = output_dir.joinpath(f"{video_path.stem}_snippets.npz")
-                if args.verbose:
-                    logging.info(f"Saving snippets to {save_to}")
-                snippet_dict = {}
-                for i_dil, snippets in enumerate(pipe_out.snippet_ls):
-                    dilation = args.dilations[i_dil]
-                    snippet_dict[f"dilation{dilation}"] = snippets.numpy().squeeze(
-                        2
-                    )  # [n_snip, snippet_len, H W]
-                np.savez_compressed(save_to, **snippet_dict)
+            # 如果数据是 float16 或 float32，先进行归一化处理到 [0, 255]
+            # 假设数据是 [0, 1] 范围内的浮点数
+            combined_pred = (combined_pred * 255).clamp(0, 255)  # 确保值在 0 到 255 之间
 
-            # Colorize results
-            if args.output_fps > 0:
-                output_fps = args.output_fps
-            else:
-                output_fps = get_video_fps(video_path)
+            # 转换为 np.uint8 类型
+            combined_pred_np = combined_pred.numpy().astype(np.uint8)
 
-            for i_cmap, cmap in enumerate(args.color_maps):
-                if "" == cmap:
-                    continue
-                colored_np = colorize_depth_multi_thread(
-                    depth=depth_pred.numpy(),
-                    valid_mask=None,
-                    chunk_size=4,
-                    num_threads=4,
-                    color_map=cmap,
-                    verbose=args.verbose,
-                )  # [n h w 3], in [0, 255]
-                save_to = output_dir.joinpath(f"{video_path.stem}_{cmap}.mp4")
+            #combined_pred_np = einops.rearrange(combined_pred_np, "n c h w -> n h w c")
+            # 转置到 [N, H, W, 3] 形状
+            combined_pred_np = np.transpose(combined_pred_np, (0, 2, 3, 1))
+            save_to = output_dir.joinpath(f"{fg_video_path.stem}_rgb.mp4")
+            write_video_from_numpy(
+                frames=combined_pred_np,
+                output_path=save_to,
+                fps=args.output_fps,
+                crf=23,
+                preset="medium",
+                verbose=args.verbose,
+            )
+            # # # save rgb img as video
+            # # save_snippets_as_video(
+            # #     rgb_pred, 
+            # #     output_path="aligned_output.mp4", 
+            # #     fps=30
+            # # )
 
-                write_video_from_numpy(
-                    frames=colored_np,
-                    output_path=save_to,
-                    fps=output_fps,
-                    crf=23,
-                    preset="medium",
-                    verbose=args.verbose,
-                )
+            # # Save prediction as npy
+            # if args.save_npy:
+            #     save_to = output_dir.joinpath(f"{video_path.stem}_pred.npy")
+            #     if args.verbose:
+            #         logging.info(f"Saving predictions to {save_to}")
+            #     np.save(save_to, depth_pred.numpy().squeeze(1))  # [N H W]
 
-                # Save side-by-side videos
-                if args.save_sbs and 0 == i_cmap:
-                    rgb = pipe_out.input_rgb * 255  # [N 3 H W]
-                    colored_depth = einops.rearrange(
-                        torch.from_numpy(colored_np), "n h w c -> n c h w"
-                    )
-                    concat_video = (
-                        concatenate_videos_horizontally_torch(
-                            rgb, colored_depth, gap=10
-                        )
-                        .int()
-                        .numpy()
-                        .astype(np.uint8)
-                    )
-                    concat_video = einops.rearrange(concat_video, "n c h w -> n h w c")
-                    save_to = output_dir.joinpath(f"{video_path.stem}_rgbd.mp4")
-                    write_video_from_numpy(
-                        frames=concat_video,
-                        output_path=save_to,
-                        fps=output_fps,
-                        crf=23,
-                        preset="medium",
-                        verbose=args.verbose,
-                    )
+            # # Save intermediate snippets
+            # if args.save_snippets and pipe_out.snippet_ls is not None:
+            #     save_to = output_dir.joinpath(f"{video_path.stem}_snippets.npz")
+            #     if args.verbose:
+            #         logging.info(f"Saving snippets to {save_to}")
+            #     snippet_dict = {}
+            #     for i_dil, snippets in enumerate(pipe_out.snippet_ls):
+            #         dilation = args.dilations[i_dil]
+            #         snippet_dict[f"dilation{dilation}"] = snippets.numpy().squeeze(
+            #             2
+            #         )  # [n_snip, snippet_len, H W]
+            #     np.savez_compressed(save_to, **snippet_dict)
+
+            # # Colorize results
+            # for i_cmap, cmap in enumerate(args.color_maps):
+            #     if "" == cmap:
+            #         continue
+            #     colored_np = colorize_depth_multi_thread(
+            #         depth=depth_pred.numpy(),
+            #         valid_mask=None,
+            #         chunk_size=4,
+            #         num_threads=4,
+            #         color_map=cmap,
+            #         verbose=args.verbose,
+            #     )  # [n h w 3], in [0, 255]
+            #     save_to = output_dir.joinpath(f"{video_path.stem}_{cmap}.mp4")
+            #     if not args.output_fps > 0:
+            #         output_fps = int(get_video_fps(video_path))
+            #     write_video_from_numpy(
+            #         frames=colored_np,
+            #         output_path=save_to,
+            #         fps=args.output_fps,
+            #         crf=23,
+            #         preset="medium",
+            #         verbose=args.verbose,
+            #     )
+
+            #     # Save side-by-side videos
+            #     if args.save_sbs and 0 == i_cmap:
+            #         rgb = pipe_out.input_rgb * 255  # [N 3 H W]
+            #         colored_depth = einops.rearrange(
+            #             torch.from_numpy(colored_np), "n h w c -> n c h w"
+            #         )
+            #         concat_video = (
+            #             concatenate_videos_horizontally_torch(rgb, colored_depth, gap=10)
+            #             .int()
+            #             .numpy()
+            #             .astype(np.uint8)
+            #         )
+            #         concat_video = einops.rearrange(concat_video, "n c h w -> n h w c")
+            #         save_to = output_dir.joinpath(f"{video_path.stem}_rgbd.mp4")
+            #         write_video_from_numpy(
+            #             frames=concat_video,
+            #             output_path=save_to,
+            #             fps=args.output_fps,
+            #             crf=23,
+            #             preset="medium",
+            #             verbose=args.verbose,
+            #         )
 
         logging.info(
-            f"Finished. {len(video_iterable)} predictions are saved to {output_dir}"
+            f"Finished. {len(fg_video_iterable)} predictions are saved to {output_dir}"
         )
